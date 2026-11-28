@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { type FormEvent, useEffect, useId, useRef, useState } from 'react';
 import { api, uploadFile } from '../_lib/client-api';
 import { useAction } from '../_lib/use-action';
@@ -203,10 +202,7 @@ export function AskForm({
         </ul>
       )}
       {none && (
-        <p className="note">
-          에이전트 없음. 작업은 에이전트가 생길 때까지 대기{' · '}
-          <Link href="/admin/agents?new=1">일꾼 추가</Link>
-        </p>
+        <p className="note">에이전트 없음. 대화를 처음 열면 대표와 역할 일꾼이 함께 생겨요</p>
       )}
       {action.problem && <p className="error">{action.problem}</p>}
     </form>

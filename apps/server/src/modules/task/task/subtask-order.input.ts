@@ -1,4 +1,5 @@
 import { BaseRequest, InvalidRequest, type RequestFields } from '../../platform';
+import { AgentRoles } from '../agent/agent-roles';
 import type { TaskNew } from '../task.tables';
 
 /** 대상의 판(target_version) 위쪽 끝 (Postgres integer) */
@@ -20,6 +21,8 @@ export class SubtaskOrder extends BaseRequest {
     readonly requestId: string,
     /** 받는 일꾼. 비우면 서버가 덜 바쁜 일꾼을 고른다 (D3, DelegationPolicy.assign → assigned) */
     readonly toAgentId: string | null,
+    /** 맡을 역할 일꾼 (agent-roles.json의 열쇠, 2026-11-28). 있으면 to_agent_id보다 먼저 그 역할 일꾼에게 (DelegationPolicy.assign) */
+    readonly role: string | null,
     /** MCP 입력은 칸 이름 그대로다. 대상의 판(base_version)만 target_version으로 받는다 */
     readonly fields: Omit<TaskNew, 'id' | 'space_id'>,
     /** code 일의 고칠 수 있는 곳 (위 code 작업의 경로 안). 다른 일에는 없다 */
@@ -59,6 +62,7 @@ export class SubtaskOrder extends BaseRequest {
     return new SubtaskOrder(
       f.text('request_id', 200),
       f.optionalText('to_agent_id', 36) === null ? null : f.uuid('to_agent_id'),
+      SubtaskOrder.roleOf(f.optionalText('role', 40)),
       {
         kind: f.optionalText('kind', 100) ?? 'general',
         title: f.text('title', 200),
@@ -78,6 +82,12 @@ export class SubtaskOrder extends BaseRequest {
       (raw as { verify?: unknown } | null)?.verify === undefined ? false : f.boolean('verify'),
       (raw ?? {}) as Record<string, unknown>,
     );
+  }
+
+  private static roleOf(role: string | null): string | null {
+    if (role !== null && !AgentRoles.KEYS.includes(role))
+      throw new InvalidRequest(new Map([['role', `${AgentRoles.KEYS.join(' · ')} 중 하나예요`]]));
+    return role;
   }
 
   private static routeOf(route: string | null): string | null {

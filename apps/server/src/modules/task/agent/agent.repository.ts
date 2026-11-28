@@ -140,6 +140,19 @@ export class AgentRepository extends TableRepository<AgentRow, Agent> {
     return this.findLead(spaceId);
   }
 
+  /** 공간의 살아 있는 역할 일꾼 (2026-11-28, AgentRoster가 갖춘다) */
+  async presets(spaceId: string): Promise<readonly Agent[]> {
+    const live = await this.find({ space_id: spaceId, deleted_at: null }, { order: ['id'] });
+    return live.filter((a) => a.preset !== null);
+  }
+
+  /** 대표가 있는 공간들 (서버를 켤 때 공간마다 역할 일꾼을 갖춘다) */
+  async leadSpaces(): Promise<readonly string[]> {
+    const rows = await this.sql<{ space_id: string }[]>`
+      SELECT space_id FROM task.agents WHERE lead AND deleted_at IS NULL`;
+    return rows.map((r) => r.space_id);
+  }
+
   private static alive(agent: Agent): Agent {
     if (agent.deleted) throw new NotFound('에이전트를 찾을 수 없어요');
     return agent;

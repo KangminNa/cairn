@@ -48,7 +48,6 @@ export type AgentBody = {
 // 권한 · 보고 대상은 없다: 모든 일꾼이 같은 권한으로 같은 일을 하고 대표가 누구에게나 맡긴다 (2026-11-21)
 export function AgentForm({
   agent,
-  suggestedName,
   agents,
   runners,
   externalTools,
@@ -59,8 +58,6 @@ export function AgentForm({
   onClose,
 }: {
   agent: Agent | null;
-  /** 새 일꾼의 이름 칸에 미리 넣을 이름 ("일꾼 N", 2026-11-23 역할 이름 일꾼 정리) */
-  suggestedName?: string;
   /** 공간의 모든 에이전트 (검토자 고르기) */
   agents: readonly Agent[];
   /** 묶을 수 있는 러너 (실행 러너 고르기) */
@@ -75,8 +72,10 @@ export function AgentForm({
   onClose: () => void;
 }) {
   const id = useId();
-  const [name, setName] = useState(agent?.name ?? suggestedName ?? '');
+  const [name, setName] = useState(agent?.name ?? '');
   const [role, setRole] = useState(agent?.role ?? '');
+  /** 역할 일꾼 (2026-11-28): 이름 · 역할은 서버의 정의 파일 그대로 */
+  const preset = Boolean(agent?.preset);
   // 칸의 값은 고른 글자 그대로 둔다 (값 목록은 서버가 본다). 고르기 전에는 엔진 목록의 첫 줄(기본)
   const engines = useEngines();
   const [picked, setTool] = useState<string | null>(agent?.tool ?? null);
@@ -155,20 +154,26 @@ export function AgentForm({
           value={name}
           maxLength={60}
           required
+          readOnly={preset}
           onChange={(e) => change(() => setName(e.target.value))}
         />
       </div>
       <div className="field">
-        <label htmlFor={`${id}-role`}>지킬 것 (선택)</label>
+        <label htmlFor={`${id}-role`}>{preset ? '역할' : '지킬 것 (선택)'}</label>
         <textarea
           id={`${id}-role`}
           className="input"
-          rows={2}
+          rows={preset ? 6 : 2}
           value={role}
           maxLength={2000}
+          readOnly={preset}
           onChange={(e) => change(() => setRole(e.target.value))}
         />
-        <small>비워 두면 다른 일꾼과 같아요. 이 일꾼만 지킬 것이 있을 때만 적어요</small>
+        <small>
+          {preset
+            ? '기본 역할 일꾼이라 이름 · 역할은 바꾸지 않아요. 도구 · 모델 · 한도는 바꿔요'
+            : '비워 두면 다른 일꾼과 같아요. 이 일꾼만 지킬 것이 있을 때만 적어요'}
+        </small>
       </div>
       <div className="field">
         <label htmlFor={`${id}-tool`}>AI 도구</label>

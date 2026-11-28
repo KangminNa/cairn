@@ -49,6 +49,7 @@ export interface AgentRow {
   lead: boolean;
   reviewer_approves: boolean;
   second_inspector_id: string | null;
+  preset: string | null;
 }
 export type AgentNew = Partial<AgentRow> & Pick<AgentRow, 'id' | 'space_id' | 'name' | 'tool'>;
 

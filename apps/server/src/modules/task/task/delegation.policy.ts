@@ -1,5 +1,6 @@
 import { Actor, Forbidden, RuleViolation } from '../../platform';
 import type { Agent } from '../agent/agent';
+import { AgentRoles } from '../agent/agent-roles';
 import { ModelTier } from '../agent/model-tier.policy';
 import { TurnBrief } from '../chat/turn-brief.policy';
 import type { TaskNew, TaskRow } from '../task.tables';
@@ -74,9 +75,11 @@ export class DelegationPolicy {
   }
 
   /**
-   * 담당을 비운 하위 작업에 일꾼을 고른다 (D3, 2026-11-28: 2026-11-17의 "역할로 맡기기"를 팀 없는 같은 일꾼에 맞춤).
-   * 대표가 맡길 수 있고(Agent.manages) 멈추지 않았으며 그 일의 권한을 가진 일꾼 가운데 지금 쥔 일(대기 · 실행, loads)이
-   * 가장 적은 쪽, 같으면 목록 순서. 한 번의 호출에서 먼저 맡긴 것도 센다. 고를 일꾼이 없으면 RuleViolation
+   * 하위 작업에 일꾼을 고른다 (D3 2026-11-28, 역할 일꾼 2026-11-28). 순서:
+   * 역할(role)을 골랐으면 그 역할 일꾼(그 역할이 받는 종류여야 한다) → 담당(to_agent_id)을 정했으면 그대로 →
+   * 그 종류를 받는 역할 일꾼(AgentRoles.forKind) 가운데 → 그래도 없으면 맡을 수 있는 일꾼 모두 가운데.
+   * 고르는 기준은 대표가 맡길 수 있고(Agent.manages) 멈추지 않았으며 그 일의 권한을 가진 일꾼 가운데 지금 쥔 일
+   * (대기 · 실행, loads)이 가장 적은 쪽, 같으면 목록 순서. 한 번의 호출에서 먼저 맡긴 것도 센다. 고를 일꾼이 없으면 RuleViolation
    */
   static assign(
     manager: Agent,
@@ -86,20 +89,43 @@ export class DelegationPolicy {
   ): SubtaskOrder[] {
     const load = new Map(loads);
     const busy = (id: string) => load.get(id) ?? 0;
+    const least = (agents: readonly Agent[]) =>
+      agents.reduce<Agent | null>(
+        (best, a) => (best && busy(best.id) <= busy(a.id) ? best : a),
+        null,
+      )?.id;
     return orders.map((order) => {
-      const needs = TaskKinds.SCOPES[order.fields.kind ?? 'general'] ?? [];
+      const kind = order.fields.kind ?? 'general';
+      const needs = TaskKinds.SCOPES[kind] ?? [];
+      const able = org
+        .filter((a) => manager.manages(a) && !a.paused)
+        .filter((a) => needs.every((scope) => a.scopes.includes(scope)));
+      const fits = AgentRoles.forKind(kind).map((r) => r.key);
       const pick =
+        DelegationPolicy.roleAgent(manager, org, order.role, kind) ??
         order.toAgentId ??
-        org
-          .filter((a) => manager.manages(a) && !a.paused)
-          .filter((a) => needs.every((scope) => a.scopes.includes(scope)))
-          .reduce<Agent | null>((best, a) => (best && busy(best.id) <= busy(a.id) ? best : a), null)
-          ?.id;
+        least(able.filter((a) => a.preset !== null && fits.includes(a.preset))) ??
+        least(able);
       if (!pick)
-        throw new RuleViolation('맡을 수 있는 일꾼이 없어요 (일꾼 메뉴에서 일꾼을 더해요)');
+        throw new RuleViolation('맡을 수 있는 일꾼이 없어요 (일꾼 메뉴에서 멈춘 일꾼을 켜요)');
       load.set(pick, busy(pick) + 1);
-      return order.toAgentId === null ? order.assigned(pick) : order;
+      return pick === order.toAgentId ? order : order.assigned(pick);
     });
+  }
+
+  /** 대표가 고른 역할의 일꾼. 역할이 없으면 null, 그 역할이 받지 않는 종류이거나 일꾼이 없으면 RuleViolation */
+  private static roleAgent(
+    manager: Agent,
+    org: readonly Agent[],
+    role: string | null,
+    kind: string,
+  ): string | null {
+    const def = AgentRoles.find(role);
+    if (!def) return null;
+    AgentRoles.assertTakes(def, kind);
+    const agent = org.find((a) => a.preset === def.key && manager.manages(a));
+    if (!agent) throw new RuleViolation(`${def.name} 일꾼이 아직 없어요 (서버를 다시 켜면 생겨요)`);
+    return agent.id;
   }
 
   /** 위임에 쓰는 하위 작업의 request_id. AI가 만든 값을 위 작업마다 따로 센다 */

@@ -13,6 +13,8 @@ export class AgentSavedView {
       id: r.id,
       name: r.name,
       role: r.role,
+      /** 역할 일꾼의 열쇠 (agent-roles.json, 2026-11-28). null이면 예전 일꾼. 이름 · 역할을 바꾸거나 지우지 못한다 */
+      preset: r.preset ?? null,
       tool: r.tool,
       approvalActions: r.approval_actions,
       monthlyLimit: r.monthly_limit,

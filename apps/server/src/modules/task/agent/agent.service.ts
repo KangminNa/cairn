@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, type OnApplicationBootstrap } from '@nestjs/common';
 import {
   type Actor,
   Database,
@@ -18,11 +18,13 @@ import type { CreateAgentInput, DeleteAgentInput, UpdateAgentInput } from './age
 import { AgentQuery } from './agent.query';
 import { AgentRepository } from './agent.repository';
 import { AgentEdit } from './agent-edit';
+import { AgentRoster } from './agent-roster';
 
 // 에이전트 쓰기: 만들기, 고치기, 멈추기, 다시 시작, 휴지통 · 복원. 모두 주인만.
 @Injectable()
-export class AgentService extends EntityService<Agent> {
+export class AgentService extends EntityService<Agent> implements OnApplicationBootstrap {
   private static readonly CREATE = 'create_agent';
+  private readonly log = new Logger('AgentService');
 
   constructor(
     db: Database,
@@ -33,6 +35,21 @@ export class AgentService extends EntityService<Agent> {
 
   protected store(tx: Sql): AgentRepository {
     return new AgentRepository(tx);
+  }
+
+  /**
+   * 서버를 켤 때 대표가 있는 공간마다 역할 일꾼을 갖춘다 (2026-11-28, AgentRoster). 대표의 advisory 잠금 안에서 해
+   * 서버와 일꾼이 함께 켜져도 하나만 만든다. 실패하면 로그만 남기고 켜기를 막지 않는다 (다음에 켤 때 다시)
+   */
+  async onApplicationBootstrap(): Promise<void> {
+    const spaces = await this.transaction((tx) => new AgentRepository(tx).leadSpaces());
+    for (const spaceId of spaces)
+      await this.transaction(async (tx) => {
+        const lead = await new AgentRepository(tx).lockLeadSlot(spaceId);
+        if (lead) await new AgentRoster(tx, spaceId).ensure(lead, new Date());
+      }).catch((error: unknown) =>
+        this.log.error(`역할 일꾼을 갖추지 못했어요 (${spaceId}): ${String(error)}`),
+      );
   }
 
   /**

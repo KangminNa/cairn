@@ -12,6 +12,7 @@ import { LeasePolicy } from '../task/lease.policy';
 import { Agent } from './agent';
 import { CreateAgentInput, UpdateAgentInput } from './agent.input';
 import { AgentRepository } from './agent.repository';
+import { AgentRoster } from './agent-roster';
 
 /**
  * 에이전트 만들기 · 고치기 한 번을 부르는 쪽의 트랜잭션에서 (2026-11-15 C).
@@ -69,6 +70,8 @@ export class AgentEdit {
     const tool = LeasePolicy.serverTool(usable) ?? Engines.preferred();
     const lead = Agent.openLead(this.spaceId, tool, now);
     await agents.save(lead);
+    // 새 공간: 역할 일꾼도 함께 (2026-11-28). 있던 공간은 서버를 켤 때 갖춘다 (AgentService)
+    await new AgentRoster(this.tx, this.spaceId).ensure(lead, now);
     return lead;
   }
 

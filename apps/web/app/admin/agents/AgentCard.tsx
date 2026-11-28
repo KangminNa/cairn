@@ -38,6 +38,7 @@ function CardTop({
   const state = paused ? '멈춤' : (hold ?? work ?? '대기 중');
   const dot = paused || (!hold && !work) ? 'dot off' : hold ? 'dot half' : 'dot run';
   const tuning = [
+    agent.preset ? '기본 역할' : null,
     engineLabel(engines, agent.tool),
     agent.model || null,
     agent.effort ? `생각 ${EFFORT_LABELS[agent.effort] ?? agent.effort}` : null,
@@ -155,9 +156,12 @@ export function AgentCard({
           {agent.schedules > 0 ? `스케줄 ${agent.schedules}개` : '스케줄 추가'}
         </Link>
         <span className="grow" />
-        <button type="button" className="text-button" disabled={busy} onClick={onRemove}>
-          삭제
-        </button>
+        {/* 역할 일꾼은 지우지 않는다 (2026-11-28): 서버가 늘 갖춘다 */}
+        {!agent.preset && (
+          <button type="button" className="text-button" disabled={busy} onClick={onRemove}>
+            삭제
+          </button>
+        )}
       </div>
     </article>
   );
