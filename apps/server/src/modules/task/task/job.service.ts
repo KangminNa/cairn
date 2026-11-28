@@ -18,6 +18,7 @@ import { ChatUpdateQuery } from '../chat/chat-update.query';
 import { ExternalToolQuery } from '../external-tool/external-tool.query';
 import { GoalRepository } from '../goal/goal.repository';
 import { OutputQuery } from '../output/output.query';
+import { LearnedRuleQuery } from '../rule/rule.query';
 import { RunnerRepository } from '../runner/runner.repository';
 import { PromptTemplates } from '../skill/prompt-templates';
 import { RepoSkillGateway } from '../skill/repo-skill.gateway';
@@ -59,6 +60,7 @@ export class JobService extends BaseService {
     private readonly chats: ChatUpdateQuery,
     private readonly tools: ExternalToolQuery,
     private readonly progress: TaskQuery,
+    private readonly rules: LearnedRuleQuery,
   ) {
     super(db);
   }
@@ -250,6 +252,8 @@ export class JobService extends BaseService {
     const view = task.jobView(agent, this.box, goals, roster, children, skill?.jobView() ?? null);
     view.withOutputs(made).withProgress(await this.progress.progressOf(actor, open));
     view.withChat(await this.chats.forJob(actor, task.id));
+    // 배운 규칙 (2026-11-28): 일꾼의 일에만, 모든 일꾼 · 그 역할 · 그 일의 앱에 맞는 것
+    if (agent) view.withRules(await this.rules.forJob(actor, task.spaceId, task.id, agent.preset));
     // 외부 도구 (2차 7단계): 이 에이전트에게 허락한 것만, 토큰은 여기서 풀려 이 일과 함께만 나간다
     const tools = await this.tools.forJob(actor, agent, task.checkedToolId);
     return view.withPrompt(prompt?.jobView() ?? null).withTools(tools);

@@ -77,9 +77,10 @@ export class TaskService extends BaseService {
     const last = await this.lessons.last(actor, spaceId);
     const notes = await this.lessons.notes(actor, spaceId, last?.created_at ?? null);
     if (!Lessons.due(last, notes.length)) return null;
+    const rules = await this.lessons.rules(actor, spaceId);
     const instruction = (await this.skills.prompts(actor, spaceId)).fill(
       'lessons',
-      Lessons.fields(notes),
+      Lessons.fields(notes, rules),
     );
     const req = CreateTaskInput.from({
       requestId: Lessons.requestId(spaceId, new Date()),

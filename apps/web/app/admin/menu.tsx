@@ -45,6 +45,7 @@ export const DOCK = [
     tabs: true,
     pages: [
       { href: AGENTS_HREF, name: '일꾼' },
+      { href: '/admin/rules', name: '배운 규칙' },
       { href: '/admin/tasks', name: '작업 기록' },
     ],
   },

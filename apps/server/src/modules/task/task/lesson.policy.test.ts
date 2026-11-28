@@ -33,10 +33,11 @@ describe('Lessons', () => {
   });
 
   test('메모 한 줄: 날 · 동작 · 일 · 올린 에이전트 · 앱, 줄바꿈은 한 줄로', () => {
-    const { count, notes } = Lessons.fields([
-      note({ app_id: 'app-1' }),
-      note({ agent_name: null }),
-    ]);
+    const { count, notes, rules } = Lessons.fields(
+      [note({ app_id: 'app-1' }), note({ agent_name: null })],
+      [],
+    );
+    assert.equal(rules, null);
     assert.equal(count, 2);
     assert.equal(
       String(notes).split('\n')[0],
@@ -44,5 +45,27 @@ describe('Lessons', () => {
     );
     assert.match(String(notes), /관리자 메모: 제목을 짧게/);
     assert.match(String(notes), /- \[2026-11-20\] blog\.post\.publish · 일: 초안 쓰기\n/);
+  });
+
+  test('배운 규칙 한 줄: 번호 · 도움 · 해로움 · 대상 · id · 글 (2026-11-28)', () => {
+    const rule = {
+      id: 'r-1',
+      space_id: 's',
+      seq: 3,
+      scope: 'role',
+      scope_key: 'writer',
+      body: '제목은 40자 안으로',
+      helpful: 2,
+      harmful: 1,
+      status: 'active',
+      approval_id: null,
+      replaced_by: null,
+      version: 1,
+      created_at: new Date(),
+      updated_at: new Date(),
+      retired_at: null,
+    } as const;
+    const { rules } = Lessons.fields([], [rule]);
+    assert.equal(rules, '- [R3] 도움 2 · 해로움 1 · 대상 role writer (id r-1): 제목은 40자 안으로');
   });
 });

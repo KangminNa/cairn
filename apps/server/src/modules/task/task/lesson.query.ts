@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { type Actor, BaseQuery, Forbidden } from '../../platform';
-import { agents } from '../task.schema';
-import type { TaskRow } from '../task.tables';
+import { agents, learnedRules } from '../task.schema';
+import type { LearnedRuleRow, TaskRow } from '../task.tables';
 import { type LessonNoteRow, Lessons } from './lesson.policy';
 
 // 피드백에서 배우기의 읽기 (2026-11-20, Lessons): 대표, 지난 배우기 일, 그 뒤의 관리자 수정 요청 메모.
@@ -56,6 +56,12 @@ export class LessonQuery extends BaseQuery {
         AND (${since}::timestamptz IS NULL OR a.decided_at > ${since}::timestamptz)
       ORDER BY a.decided_at DESC, a.id DESC
       LIMIT ${Lessons.NOTES_MAX}`;
+  }
+
+  /** 쓰는 중인 배운 규칙 (2026-11-28): 배우기 일이 횟수를 보고 더하기 · 내리기 · 합치기를 제안한다 */
+  async rules(actor: Actor, spaceId: string): Promise<readonly LearnedRuleRow[]> {
+    LessonQuery.assertSpace(actor, spaceId);
+    return this.rows(learnedRules, { space_id: spaceId, status: 'active' }, { order: ['seq'] });
   }
 
   private static assertSpace(actor: Actor, spaceId: string): void {

@@ -14,6 +14,7 @@ import { AppApproval } from '../approval/app-approval.policy';
 import { Approval } from '../approval/approval';
 import { ApprovalRepository } from '../approval/approval.repository';
 import { OutputRepository } from '../output/output.repository';
+import { LearnedRuleRepository } from '../rule/rule.repository';
 import { SkillQuery } from '../skill/skill.query';
 import { Task } from '../task/task';
 import { TaskRepository } from '../task/task.repository';
@@ -21,6 +22,7 @@ import { TaskPlan } from '../task/task-plan.policy';
 import type { AppCodeAddedInput } from './chat.input';
 import { ChatRepository } from './chat.repository';
 import { ChatInspect } from './chat-inspect.policy';
+import { ChatRequest } from './chat-request.policy';
 import { ChatResult } from './chat-result.policy';
 import { ChatReview } from './chat-review.policy';
 import { TurnDeliver } from './turn-deliver.policy';
@@ -156,7 +158,13 @@ export class ChatResultService extends BaseService {
         await tasks.insertOnce(task);
       } else if (step === ChatResult.REVIEW && reviewer) {
         const items = [...actions.map((a) => a.action), ...made.map((o) => o.name)];
+        // 팀이 따른 배운 규칙 (2026-11-28): 검토자가 규칙마다 도움 · 해로움을 적는다 (RuleMarks.fromReview)
+        const followed = await new LearnedRuleRepository(tx).followedInTurn(
+          spaceId,
+          ChatRequest.turn(chat.id, chat.turns),
+        );
         const instruction = prompts.fill('result-review', {
+          rules: followed.map((r) => `- [R${r.seq}] ${r.body}`).join('\n') || null,
           goal: chat.goal,
           message: turn.instruction ?? '',
           answer: ChatResult.textOf(turn.result) || '-',

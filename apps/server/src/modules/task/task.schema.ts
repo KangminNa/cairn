@@ -2,7 +2,7 @@
 // 조건 규칙(platform/base의 TableQuery)이 쓰는 Drizzle 표: 표 이름 · 칸 · 행 타입. 칸 이름은 DB 그대로다.
 // drizzle-orm을 직접 가져오는 곳은 이 생성 파일들과 platform/base뿐이다 (모듈 경계 검사).
 import { bigint, boolean, customType, integer, jsonb, pgSchema, real, smallint, text, timestamp, uuid } from 'drizzle-orm/pg-core';
-import type { AgentEffort, AgentScope, AgentStatus, AgentTool, AiLoginTool, ApiCallEffect, ApiCallHeldReason, ApiCallStatus, ApiConnectorStatus, ApprovalStatus, ChatDeliver, ChatEffort, ChatStopMode, ChatUpdateKind, ExternalToolAuth, ExternalToolStatus, GoalRunCheckpoint, GoalRunStatus, GoalStatus, OutputKind, PlanUsagePeriod, PlanUsageStatus, PlanUsageTool, ScheduleDeliver, ScheduleDestination, ScheduleMode, ScheduleTrigger, TaskEventKind, TaskRunPromptSource, TaskRunSkillSource, TaskStatus, TaskWaitReason, VerdictKind, VerdictVerdict } from './task.tables';
+import type { AgentEffort, AgentScope, AgentStatus, AgentTool, AiLoginTool, ApiCallEffect, ApiCallHeldReason, ApiCallStatus, ApiConnectorStatus, ApprovalStatus, ChatDeliver, ChatEffort, ChatStopMode, ChatUpdateKind, ExternalToolAuth, ExternalToolStatus, GoalRunCheckpoint, GoalRunStatus, GoalStatus, LearnedRuleScope, LearnedRuleStatus, OutputKind, PlanUsagePeriod, PlanUsageStatus, PlanUsageTool, RuleMarkMark, ScheduleDeliver, ScheduleDestination, ScheduleMode, ScheduleTrigger, TaskEventKind, TaskRunPromptSource, TaskRunSkillSource, TaskStatus, TaskWaitReason, VerdictKind, VerdictVerdict } from './task.tables';
 
 const byteaColumn = customType<{ data: Buffer }>({ dataType: () => 'bytea' });
 const xid8Column = customType<{ data: string }>({ dataType: () => 'xid8' });
@@ -259,6 +259,25 @@ export const goals = taskSchema.table('goals', {
   created_at: timestamp('created_at', { withTimezone: true }).notNull(),
 });
 
+/** task.learned_rules */
+export const learnedRules = taskSchema.table('learned_rules', {
+  id: uuid('id').notNull(),
+  space_id: uuid('space_id').notNull(),
+  seq: integer('seq').notNull(),
+  scope: text('scope').$type<LearnedRuleScope>().notNull(),
+  scope_key: text('scope_key'),
+  body: text('body').notNull(),
+  helpful: integer('helpful').notNull(),
+  harmful: integer('harmful').notNull(),
+  status: text('status').$type<LearnedRuleStatus>().notNull(),
+  approval_id: uuid('approval_id'),
+  replaced_by: uuid('replaced_by'),
+  version: integer('version').notNull(),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull(),
+  updated_at: timestamp('updated_at', { withTimezone: true }).notNull(),
+  retired_at: timestamp('retired_at', { withTimezone: true }),
+});
+
 /** task.output_shares */
 export const outputShares = taskSchema.table('output_shares', {
   id: uuid('id').notNull(),
@@ -298,6 +317,17 @@ export const planUsage = taskSchema.table('plan_usage', {
   resets_at: timestamp('resets_at', { withTimezone: true }).notNull(),
   status: text('status').$type<PlanUsageStatus>(),
   seen_at: timestamp('seen_at', { withTimezone: true }).notNull(),
+});
+
+/** task.rule_marks */
+export const ruleMarks = taskSchema.table('rule_marks', {
+  id: uuid('id').notNull(),
+  space_id: uuid('space_id').notNull(),
+  rule_id: uuid('rule_id').notNull(),
+  source: text('source').notNull(),
+  mark: text('mark').$type<RuleMarkMark>().notNull(),
+  task_id: uuid('task_id'),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull(),
 });
 
 /** task.runners */

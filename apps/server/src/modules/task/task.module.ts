@@ -63,6 +63,7 @@ import { OutputPurgeJob } from './output/output-purge.job';
 import { OutputShareController } from './output-share/output-share.api';
 import { OutputShareQuery } from './output-share/output-share.query';
 import { OutputShareService } from './output-share/output-share.service';
+import { RuleController } from './rule/rule.api';
 import { RunnerController } from './runner/runner.api';
 import { RunnerQuery } from './runner/runner.query';
 import { RunnerService } from './runner/runner.service';
@@ -83,8 +84,6 @@ import { AgentlessRequestHandler } from './task/agentless-request.handler';
 import { JobService } from './task/job.service';
 import { LeadTalkService } from './task/lead-talk.service';
 import { LeaseJob } from './task/lease.job';
-import { LessonHandler } from './task/lesson.handler';
-import { LessonQuery } from './task/lesson.query';
 import { SubtaskService } from './task/subtask.service';
 import { SubtaskSettledHandler } from './task/subtask-settled.handler';
 import { SubtaskWaitJob } from './task/subtask-wait.job';
@@ -97,6 +96,7 @@ import { TaskTrashService } from './task/task-trash.service';
 import events from './task.events.json';
 import { TaskConnectors } from './task-connectors';
 import { TaskNotices } from './task-notices';
+import { TaskRules } from './task-rules';
 import { TaskSettings } from './task-settings';
 import { TaskTools } from './task-tools';
 import { UsageController } from './usage/usage.api';
@@ -175,9 +175,6 @@ import { WebPageGateway } from './web/web-page.gateway';
     // 평가가 남는 팀 (2026-11-20): 끝난 검토 · 검수 작업 → 판정을 점수와 함께 쌓는다 (성적표)
     VerdictService,
     VerdictHandler,
-    // 피드백에서 배우기 (2026-11-20): 관리자의 수정 요청 메모가 쌓이면 대표에게 배우기 일
-    LessonQuery,
-    LessonHandler,
     // 대화의 만들기 일이 낸 앱 코드의 확인 대기 버전 → 결과 카드의 공개 승인 (스토어 1-6b)
     AppCodeCardHandler,
     // 승인 뒤 이어서 (O-2): 대표가 continue로 올린 설정 바꾸기가 적용되어 끝난 회차 → 같은 대화의 다음 회차
@@ -208,6 +205,8 @@ import { WebPageGateway } from './web/web-page.gateway';
     SettingApplyHandler,
     // API 커넥터 · 도구 찾기 (2026-11-24): 정의서 · 서버가 부르기 · 레지스트리 찾기. 목록과 잇기는 TaskConnectors
     ...TaskConnectors.PROVIDERS,
+    // 피드백에서 배우기 (2026-11-20) · 배운 규칙과 도움 · 해로움 세기 (2026-11-28). 잇기는 TaskRules
+    ...TaskRules.PROVIDERS,
   ],
   controllers: [
     AgentController,
@@ -227,6 +226,7 @@ import { WebPageGateway } from './web/web-page.gateway';
     ExternalToolOAuthController,
     ApiConnectorController,
     LinkPreviewController,
+    RuleController,
   ],
   exports: [TaskTools, TaskQuery],
 })
@@ -256,7 +256,6 @@ export class TaskModule implements OnModuleInit {
     private readonly chatInspections: ChatInspectHandler,
     private readonly verdicts: VerdictHandler,
     private readonly chatCards: ChatCardHandler,
-    private readonly lessons: LessonHandler,
     private readonly appCodeCards: AppCodeCardHandler,
     private readonly chatContinues: ChatContinueHandler,
     private readonly agentless: AgentlessRequestHandler,
@@ -284,7 +283,6 @@ export class TaskModule implements OnModuleInit {
     this.workers.on(Task.CHANGED, this.chatInspections);
     this.workers.on(Task.CHANGED, this.verdicts);
     for (const topic of ChatCardHandler.TOPICS) this.workers.on(topic, this.chatCards);
-    for (const topic of LessonHandler.TOPICS) this.workers.on(topic, this.lessons);
     this.workers.on(AppCodeCardHandler.TOPIC, this.appCodeCards);
     this.workers.on(Task.CHANGED, this.chatContinues);
     this.workers.on(Task.CHANGED, this.follows);

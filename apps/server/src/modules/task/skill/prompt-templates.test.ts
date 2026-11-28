@@ -91,7 +91,17 @@ describe('PromptTemplates', () => {
         count: 3,
         notes: '- [2026-11-20] blog.post.publish\n  관리자 메모: 짧게',
       }),
-      /^# 피드백에서 배우기\n관리자가 최근 수정 요청에 남긴 메모 3개[\s\S]*관리자 메모: 짧게\n## 하는 법/,
+      /^# 피드백에서 배우기\n관리자가 최근 수정 요청에 남긴 메모 3개[\s\S]*관리자 메모: 짧게\n## 지금 쓰는 배운 규칙[^\n]*\n- 아직 없음\n## 하는 법/,
     );
+    // 배운 규칙 (2026-11-28): 쓰는 중인 규칙이 있으면 번호 · 횟수와 함께, 검토에는 팀이 따른 규칙
+    assert.match(
+      t.fill('lessons', { count: 1, notes: '-', rules: '- [R3] 도움 2 · 해로움 0' }),
+      /## 지금 쓰는 배운 규칙[^\n]*\n- \[R3\] 도움 2/,
+    );
+    assert.match(
+      t.fill('result-review', { message: '-', answer: '-', rules: '- [R3] 제목은 짧게' }),
+      /## 팀이 따랐다고 적은 배운 규칙\n- \[R3\] 제목은 짧게/,
+    );
+    assert.doesNotThrow(() => t.fill('rules', { rules: '- [R3] 제목은 짧게' }));
   });
 });

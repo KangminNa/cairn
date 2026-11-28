@@ -1,4 +1,11 @@
-import type { AgentRow, ChatUpdateRow, ExternalToolRow, OutputRow, TaskRow } from '../task.tables';
+import type {
+  AgentRow,
+  ChatUpdateRow,
+  ExternalToolRow,
+  LearnedRuleRow,
+  OutputRow,
+  TaskRow,
+} from '../task.tables';
 
 // 러너 · 에이전트가 MCP로 받는 작업의 모양 (next_jobs · report_progress · submit_result · delegate_task). 도구의 모양이라 snake_case.
 // 화면이 받는 모양은 task.view.ts. view끼리는 서로 가져오지 않는다 (경계 검사: view는 표 인터페이스만)
@@ -258,6 +265,14 @@ export class JobView {
     return this;
   }
 
+  /** 이 일에 맞는 배운 규칙 (2026-11-28, 러너가 틀 rules로 그린다) */
+  private rules: readonly Pick<LearnedRuleRow, 'seq' | 'body'>[] = [];
+
+  withRules(rules: readonly Pick<LearnedRuleRow, 'seq' | 'body'>[]): this {
+    this.rules = rules;
+    return this;
+  }
+
   /** 이번 실행의 세션 키 · CLI 세션 (2026-11-17). 기록하지 않는 일은 null */
   private run: JobRunView | null = null;
 
@@ -319,6 +334,7 @@ export class JobView {
       })),
       rounds_left: this.roundsLeft,
       tools: this.tools.map((t) => t.toJSON()),
+      rules: this.rules.map((r) => ({ seq: r.seq, body: r.body })),
       run: this.run?.toJSON() ?? null,
     };
   }
@@ -361,27 +377,6 @@ export class JobStateView {
 
   toJSON() {
     return { task_id: this.row.id, status: this.row.status };
-  }
-}
-
-/** delegate_task의 답. 작업은 하위 작업을 기다리므로 에이전트는 여기서 멈춘다 */
-export class DelegatedView {
-  constructor(
-    private readonly subtasks: readonly Readonly<TaskRow>[],
-    /** 위 작업이 기다리는 것 (subtasks) */
-    private readonly waiting: string,
-  ) {}
-
-  toJSON() {
-    return {
-      subtasks: this.subtasks.map((r) => ({
-        task_id: r.id,
-        to_agent_id: r.agent_id,
-        title: r.title,
-        status: r.status,
-      })),
-      waiting: this.waiting,
-    };
   }
 }
 

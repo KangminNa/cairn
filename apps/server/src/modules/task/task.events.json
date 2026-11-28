@@ -127,6 +127,9 @@
     "task.goal_run.changed": {
       "fields": ["goalRunId", "goalId", "status", "round?"]
     },
+    "task.rule.changed": {
+      "fields": ["ruleId", "status"]
+    },
     "task.page.built": {
       "fields": ["taskId", "runId", "pageId", "title", "note", "files"]
     },
