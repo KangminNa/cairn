@@ -17,12 +17,12 @@ import { AgentCard, LeadCard } from './AgentCard';
 import { type AgentBody, AgentForm } from './AgentForm';
 import { DeletedAgents } from './DeletedAgents';
 
-const NEW = 'new';
 const CONFLICT = '이미 바뀐 일꾼이에요. 최신 내용을 다시 읽었어요';
 
-// 에이전트 (2026-11-21 팀 없는 에이전트): 맨 앞에 대표, 그 뒤로 모두 같은 일꾼. 사용량과 한도, 추가, 편집, 중지, 재개.
+// 에이전트 (2026-11-21 팀 없는 에이전트): 맨 앞에 대표, 그 뒤로 일꾼. 사용량과 한도, 편집, 중지, 재개.
 // 대표는 목록(api/agents)에 없어 따로 읽고(useLead), 고치기는 설정 › AI에서 한다.
-export function AgentsPanel({ adding }: { adding: boolean }) {
+// 역할 일꾼 (2026-11-28): 서버가 늘 갖추는 일곱 역할이라 화면에서 더하지 않는다 (예전 일꾼은 편집 · 삭제만)
+export function AgentsPanel() {
   const agents = useAgents();
   const lead = useLead().data?.lead ?? null;
   const running = useTasksIn('running');
@@ -30,8 +30,8 @@ export function AgentsPanel({ adding }: { adding: boolean }) {
   const usage = useUsage();
   const runners = useRunnerChoices();
   const externalTools = useExternalTools().data?.tools ?? [];
-  // 열린 입력 칸: 추가, 또는 편집 중인 에이전트의 id
-  const [open, setOpen] = useState<string | null>(adding ? NEW : null);
+  // 열린 입력 칸: 편집 중인 에이전트의 id
+  const [open, setOpen] = useState<string | null>(null);
   // 삭제한 에이전트(휴지통) 칸
   const [trash, setTrash] = useState(false);
   const action = useAction();
@@ -93,16 +93,13 @@ export function AgentsPanel({ adding }: { adding: boolean }) {
     save.clear();
   }
 
-  // 저장은 패널이 돌린다 (폼은 칸만). 고치기는 본 version, 만들기는 폼이 쥔 requestId를 붙인다
-  async function submit(target: Agent | null, body: AgentBody, requestId: string) {
+  // 저장은 패널이 돌린다 (폼은 칸만). 고치기는 본 version을 붙인다
+  async function submit(target: Agent, body: AgentBody) {
     const reply = await save.run(
       'save',
-      () =>
-        target
-          ? api('PATCH', `/api/agents/${target.id}`, { ...body, version: target.version })
-          : api('POST', '/api/agents', { ...body, requestId }),
+      () => api('PATCH', `/api/agents/${target.id}`, { ...body, version: target.version }),
       {
-        done: target ? '일꾼 저장됨' : '일꾼 추가됨',
+        done: '일꾼 저장됨',
         reload: agents.reload,
         conflict: '이미 바뀐 일꾼이에요. 다시 저장하면 입력한 내용으로 덮어요',
       },
@@ -118,50 +115,31 @@ export function AgentsPanel({ adding }: { adding: boolean }) {
       <header className="page-head">
         <div>
           <h1>일꾼</h1>
-          <p>대화는 대표가 받아 일꾼에게 나눠 맡겨요. 모든 일꾼은 같은 권한으로 같은 일을 해요</p>
+          <p>
+            대화는 대표가 받아 역할 일꾼(기획자 · 리서처 · 작가 · 디자이너 · 개발자 · 검토자 ·
+            브라우저 담당)에게 나눠 맡겨요
+          </p>
         </div>
-        {list && list.length > 0 && open !== NEW && (
+        {list && list.length > 0 && (
           <div className="row">
             <button type="button" className="ghost" onClick={() => setTrash(!trash)}>
               휴지통
-            </button>
-            <button type="button" className="cta small" onClick={() => show(NEW)}>
-              ＋ 일꾼 추가
             </button>
           </div>
         )}
       </header>
       {problem && <p className="error">{problem}</p>}
       {trash && <DeletedAgents onRestored={agents.reload} onClose={() => setTrash(false)} />}
-      {open === NEW && (
-        <AgentForm
-          agent={null}
-          suggestedName={`일꾼 ${(list?.length ?? 0) + 1}`}
-          agents={list ?? []}
-          runners={runners}
-          externalTools={externalTools}
-          busy={save.busy !== null}
-          problem={save.problem}
-          onSubmit={(body, requestId) => submit(null, body, requestId)}
-          onClear={save.clear}
-          onClose={() => show(null)}
-        />
-      )}
       {list === undefined ? (
         !agents.error && <p className="label-mono loading">불러오는 중…</p>
       ) : list.length === 0 ? (
-        open !== NEW && (
-          <>
-            {lead && <LeadCard lead={lead} work={workOf(lead)} hold={hold(lead)} total={total} />}
-            <div className="panel">
-              <b>일꾼 없음</b>
-              <p className="note">대표가 맡길 일꾼이 생길 때까지 작업은 대기</p>
-              <button type="button" className="cta small fit" onClick={() => show(NEW)}>
-                일꾼 추가
-              </button>
-            </div>
-          </>
-        )
+        <>
+          {lead && <LeadCard lead={lead} work={workOf(lead)} hold={hold(lead)} total={total} />}
+          <div className="panel">
+            <b>일꾼 없음</b>
+            <p className="note">대화를 처음 열면 대표와 역할 일꾼이 함께 생겨요</p>
+          </div>
+        </>
       ) : (
         <div className="agents">
           {lead && <LeadCard lead={lead} work={workOf(lead)} hold={hold(lead)} total={total} />}
@@ -175,7 +153,7 @@ export function AgentsPanel({ adding }: { adding: boolean }) {
                 externalTools={externalTools}
                 busy={save.busy !== null}
                 problem={save.problem}
-                onSubmit={(body, requestId) => submit(a, body, requestId)}
+                onSubmit={(body) => submit(a, body)}
                 onClear={save.clear}
                 onClose={() => show(null)}
               />

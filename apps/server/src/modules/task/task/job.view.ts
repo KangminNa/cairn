@@ -70,6 +70,8 @@ export class JobTeamMemberView {
       agent_id: r.id,
       name: r.name,
       role: r.role,
+      /** 역할 일꾼의 열쇠 (delegate_task의 role, 2026-11-28). null이면 예전 일꾼 */
+      preset: r.preset ?? null,
       status: r.status,
       kinds: this.kinds,
       bound,

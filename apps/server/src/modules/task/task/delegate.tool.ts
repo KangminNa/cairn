@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Actor, BaseTool } from '../../platform';
+import { AgentRoles } from '../agent/agent-roles';
 import { ModelTier } from '../agent/model-tier.policy';
 import { CodeScope } from './code-scope';
 import { DelegationPolicy } from './delegation.policy';
@@ -39,6 +40,7 @@ export class DelegateTaskTool extends BaseTool {
               maxLength: 200,
             },
             to_agent_id: { type: 'string', format: 'uuid' },
+            role: { type: 'string', enum: [...AgentRoles.KEYS] },
             kind: {
               type: 'string',
               enum: [...Task.DELEGABLE],

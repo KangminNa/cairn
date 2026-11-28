@@ -166,6 +166,7 @@ export class PlatformModule implements OnModuleInit, OnApplicationBootstrap {
     private readonly notices: NoticeCatalog,
     private readonly push: NoticePushJob,
     private readonly securityPurge: SecurityLogPurgeJob,
+    private readonly gate: HostGate,
   ) {}
 
   onModuleInit(): void {
@@ -178,7 +179,13 @@ export class PlatformModule implements OnModuleInit, OnApplicationBootstrap {
     this.workers.every(this.sweep, BlobSweepJob.EVERY_MS);
     this.workers.due(this.push);
     this.workers.every(this.securityPurge, SecurityLogPurgeJob.EVERY_MS);
+    // 기능 패키지의 입구(/api/p/…)는 앱 도메인 · 공통 앱 도메인에서도 연다 (2026-11-28: 앱 보기의 메일 구독이 "없는 주소예요"로
+    // 막히던 것). 앱 도메인의 요청은 늘 방문자라(ActorGuard) 지나가는 것은 누구나 부르는 동작(Operation.ANYONE)뿐이다
+    this.gate.openPaths([PlatformModule.PACKAGE_PATHS], true);
   }
+
+  /** 기능 패키지의 입구 */
+  static readonly PACKAGE_PATHS = /^\/api\/p\/[a-z0-9-]+\//;
 
   /** 모든 모듈이 등록을 마친 뒤: 듣는 무늬(받기 · 마감 작업 · 알림)가 이벤트 목록의 주제와 맞는지. 틀리면 서버가 뜨지 않는다 */
   onApplicationBootstrap(): void {

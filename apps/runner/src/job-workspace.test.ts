@@ -336,6 +336,14 @@ describe('지시문', () => {
           connectors: ['notion', 'linear'],
         },
         { agent_id: 'w1', name: '글쓰기', role: '', status: 'active', kinds: ['general'] },
+        {
+          agent_id: 'r1',
+          name: '리서처',
+          role: '사실 · 자료가 필요한 조사를 맡긴다.\n하는 일: 웹 검색',
+          preset: 'researcher',
+          status: 'active',
+          kinds: ['general', 'tidy_session'],
+        },
       ],
       subtask_results: [
         { title: '조사', agent: '조사 팀장', status: 'done', summary: '표', deliver: '표 하나' },
@@ -350,11 +358,18 @@ describe('지시문', () => {
     // 옛 서버(일꾼 정보 없음)면 0으로, 커넥터 · 성적 칸은 없다
     assert.ok(prompt.includes('글쓰기 (agent_id: w1) · 맡길 수 있는 일: general · 쥔 일 0개'));
     assert.equal(/글쓰기 \(agent_id: w1\)[^\n]*(커넥터|성적)/.test(prompt), false);
+    // 역할 일꾼은 role 열쇠와 역할의 첫 줄만 (2026-11-28)
+    assert.ok(
+      prompt.includes(
+        '리서처 (agent_id: r1 · role: researcher): 사실 · 자료가 필요한 조사를 맡긴다. · 맡길 수 있는 일: general, tidy_session',
+      ),
+    );
+    assert.ok(prompt.includes('역할로 맡깁니다'));
     assert.ok(prompt.includes('## 나누는 법'));
     // 모델은 맡기는 쪽이 일마다 고르고, 상한은 내 모델 (2026-11-19). 정하지 않았으면 CLI 기본(opus)
     assert.ok(prompt.includes('delegate_task의 model로 고릅니다'));
     assert.ok(prompt.includes('내 모델(opus)보다 높게 고를 수 없습니다'));
-    assert.ok(prompt.includes('propose_setting'), '맡을 일꾼이 없으면 일꾼 더하기를 제안한다');
+    assert.ok(prompt.includes('propose_setting'), '커넥터가 없으면 붙이기를 제안한다');
     assert.ok(prompt.includes('## [완료] 조사 (조사 팀장)\n요청한 형식: 표 하나\n표'));
 
     const child = job({ deliver: '후보 3개를 표로' }).prompt(REPO_PROMPTS, false);
@@ -463,7 +478,7 @@ describe('지시문', () => {
     assert.equal(job({}).prompt(REPO_PROMPTS, false).includes('ask_help'), false, '맨 위 일');
   });
 
-  test('대표의 일(agent.lead, O-2)에는 lead 단락을 넣는다: 직접 할 일 · 나눠 맡기기 · continue로 일꾼 더하기 제안 · 결과 중심', () => {
+  test('대표의 일(agent.lead, O-2)에는 lead 단락을 넣는다: 직접 할 일 · 나눠 맡기기 · continue로 커넥터 붙이기 제안 · 결과 중심', () => {
     const team = [{ agent_id: 'h1', name: '조사', role: '', status: 'active', kinds: ['general'] }];
     const lead = job({
       agent: {

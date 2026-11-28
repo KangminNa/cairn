@@ -42,6 +42,7 @@ export const agents = taskSchema.table('agents', {
   lead: boolean('lead').notNull(),
   reviewer_approves: boolean('reviewer_approves').notNull(),
   second_inspector_id: uuid('second_inspector_id'),
+  preset: text('preset'),
 });
 
 /** task.ai_logins */

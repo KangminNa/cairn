@@ -15,6 +15,7 @@ import { AGENT_TOOL, type AgentNew, type AgentRevisionNew, type AgentRow } from 
 import { AgentUsageView } from '../usage/usage.view';
 import { AgentSavedView } from './agent.view';
 import { AgentLead } from './agent-lead.policy';
+import { type AgentRoleDef, AgentRoles } from './agent-roles';
 import { AgentRuntime } from './agent-runtime.policy';
 import { AgentScopes } from './agent-scopes.policy';
 
@@ -132,6 +133,13 @@ export class Agent extends TableEntity<AgentRow, AgentNew> {
     return lead;
   }
 
+  /** 역할 일꾼 (2026-11-28, AgentRoles): 서버가 공간마다 갖춘다. tool: 대표의 AI 도구 */
+  static openPreset(spaceId: string, def: AgentRoleDef, tool: string, now: Date): Agent {
+    const agent = Agent.open(spaceId, { ...AgentRoles.fieldsOf(def), tool }, now);
+    agent.put('preset', def.key);
+    return agent;
+  }
+
   static restore(row: AgentRow): Agent {
     return new Agent(row);
   }
@@ -202,6 +210,11 @@ export class Agent extends TableEntity<AgentRow, AgentNew> {
     return this.row.monthly_limit;
   }
 
+  /** 역할 일꾼의 역할 key (agent-roles.json). 대표 · 관리자가 만든 일꾼은 null */
+  get preset(): string | null {
+    return this.row.preset ?? null;
+  }
+
   get paused(): boolean {
     return this.row.status === Agent.PAUSED;
   }
@@ -217,6 +230,7 @@ export class Agent extends TableEntity<AgentRow, AgentNew> {
    */
   delete(now: Date): void {
     if (this.lead) throw new RuleViolation('대표는 지울 수 없어요');
+    if (this.preset) throw new RuleViolation('기본 역할 일꾼은 지울 수 없어요');
     if (this.deleted) throw new RuleViolation('이미 삭제한 에이전트예요');
     this.put('deleted_at', now);
     this.announce();
@@ -237,6 +251,7 @@ export class Agent extends TableEntity<AgentRow, AgentNew> {
   edit(changes: Partial<Unchecked<AgentRow>>, runner?: Runner | null): void {
     const before = this.settingsSnapshot();
     if (this.lead) AgentLead.assertEdit(changes, runner !== undefined);
+    AgentRoles.assertEdit(this.preset, changes);
     if (runner?.sandbox) throw new RuleViolation('샌드박스에는 묶을 수 없어요');
     if (runner !== undefined) this.put('runner_id', runner?.id ?? null);
     this.accept(changes, Agent.RULES);

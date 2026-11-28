@@ -6,7 +6,9 @@ import { Database, OutboxWorker, SystemActor } from '../../platform';
 import { ChatUpdateService } from '../chat/chat-update.service';
 
 // D3 (2026-11-28): delegate_task의 to_agent_id를 비우면 서버가 맡을 수 있는 일꾼 가운데 지금 쥔 일(대기 · 실행)이
-// 가장 적은 일꾼을 고른다. 대화의 일이 하위 작업을 기다리기 시작하면 나눠 맡긴 계획이 판단 소식(decision.planned)으로 남는다
+// 가장 적은 일꾼을 고른다. 대화의 일이 하위 작업을 기다리기 시작하면 나눠 맡긴 계획이 판단 소식(decision.planned)으로 남는다.
+// 역할 일꾼 (2026-11-28): role이 있으면 그 역할 일꾼에게, 둘 다 비우면 그 종류를 맡는 역할 일꾼 가운데 덜 바쁜 쪽,
+// 그 역할 일꾼이 모두 멈췄으면 다른 일꾼 가운데서. 모르는 역할은 400, 역할이 받지 않는 종류는 거절
 
 // biome-ignore lint/suspicious/noExplicitAny: 응답 JSON을 여러 겹 읽는 테스트 (모양은 assert가 본다)
 type Json = Record<string, any>;
@@ -20,6 +22,8 @@ let busy: Json;
 let idle: Json;
 /** 이 파일 동안 멈춰 둔 다른 일꾼 (끝나면 되돌린다) */
 let paused: string[] = [];
+/** 역할 일꾼의 id (열쇠 → id) */
+let presets: Map<string, string>;
 
 function ok(res: ApiResult, status = 200): Json {
   assert.equal(res.status, status, res.text);
@@ -37,6 +41,23 @@ async function tool(token: string, name: string, args: Json = {}): Promise<Json>
   return result.isError
     ? { ok: false, text: JSON.stringify(result.content) }
     : { ok: true, ...(result.structuredContent ?? {}) };
+}
+
+/** 대화 하나를 열고 대표의 회차를 빌린다 */
+async function turnOf(message: string): Promise<Json> {
+  const chat = ok(
+    await api.request('POST', '/api/chats', owner, { requestId: randomUUID(), message }),
+    201,
+  );
+  const jobs: Json[] = (await tool(runner, 'next_jobs', { limit: 5 })).jobs ?? [];
+  const turn = jobs.find((j) => j.task.payload.chat?.chatId === chat.id) as Json;
+  assert.ok(turn, '회차를 빌리지 못했다');
+  return turn;
+}
+
+async function agentsOf(parentId: string): Promise<Map<string, string>> {
+  const rows = await db.sql`SELECT title, agent_id FROM task.tasks WHERE parent_id = ${parentId}`;
+  return new Map(rows.map((r) => [String(r.title), String(r.agent_id)]));
 }
 
 const newWorker = async (name: string) =>
@@ -67,7 +88,15 @@ before(async () => {
   );
   busy = await newWorker('바쁜 일꾼');
   idle = await newWorker('한가한 일꾼');
-  // 앞 파일이 만든 일꾼은 이 파일 동안 멈춘다: 두 일꾼 사이에서만 고르게
+  // 대화를 열면 대표와 역할 일꾼이 생긴다 (AgentEdit.lead → AgentRoster)
+  await turnOf('대표 만들기');
+  presets = new Map(
+    (
+      await db.sql`SELECT preset, id FROM task.agents WHERE preset IS NOT NULL AND deleted_at IS NULL`
+    ).map((r) => [String(r.preset), String(r.id)]),
+  );
+  assert.equal(presets.size, 7, '역할 일꾼 일곱');
+  // 앞 파일이 만든 일꾼 · 역할 일꾼은 이 파일 동안 멈춘다: 두 일꾼 사이에서만 고르게 (역할 일꾼은 테스트마다 켠다)
   paused = (
     await db.sql`
       UPDATE task.agents SET status = 'paused'
@@ -180,5 +209,71 @@ describe('담당 없이 맡기기 · 계획 판단 (D3)', () => {
     } finally {
       await db.sql`UPDATE task.agents SET status = 'active' WHERE id IN (${busy.id}, ${idle.id})`;
     }
+  });
+});
+
+describe('역할로 맡기기 (2026-11-28)', () => {
+  const sub = (title: string, more: Json = {}) => ({
+    request_id: title,
+    title,
+    instruction: `${title}를 해 주세요`,
+    ...more,
+  });
+  /** 그 역할 일꾼만 잠깐 켠다 */
+  async function withActive(keys: string[], work: () => Promise<void>): Promise<void> {
+    const ids = keys.map((k) => presets.get(k) as string);
+    await db.sql`UPDATE task.agents SET status = 'active' WHERE id IN ${db.sql(ids)}`;
+    try {
+      await work();
+    } finally {
+      await db.sql`UPDATE task.agents SET status = 'paused' WHERE id IN ${db.sql(ids)}`;
+    }
+  }
+
+  test('role을 고르면 그 역할 일꾼에게, 둘 다 비우면 그 종류를 맡는 역할 일꾼에게', async () => {
+    await withActive(['writer', 'researcher', 'planner'], async () => {
+      const turn = await turnOf('역할로 나눠 줘');
+      const delegated = await tool(turn.run_token, 'delegate_task', {
+        subtasks: [
+          sub('계획', { role: 'planner' }),
+          sub('초안', { kind: 'draft_post' }),
+          sub('조사'),
+          // role이 to_agent_id보다 먼저
+          sub('비교', { role: 'researcher', to_agent_id: idle.id }),
+        ],
+      });
+      assert.equal(delegated.ok, true, delegated.text);
+      const made = await agentsOf(turn.task.id);
+      assert.equal(made.get('계획'), presets.get('planner'));
+      assert.equal(made.get('초안'), presets.get('writer'), 'draft_post의 기본은 작가');
+      assert.equal(made.get('조사'), presets.get('researcher'), 'general의 기본은 리서처');
+      assert.equal(made.get('비교'), presets.get('researcher'));
+    });
+  });
+
+  test('to_agent_id만 적으면 그 일꾼, 역할 일꾼이 모두 멈췄으면 다른 일꾼 가운데서', async () => {
+    const turn = await turnOf('정해서 맡겨 줘');
+    const delegated = await tool(turn.run_token, 'delegate_task', {
+      subtasks: [sub('지정', { to_agent_id: busy.id }), sub('아무나', { kind: 'draft_post' })],
+    });
+    assert.equal(delegated.ok, true, delegated.text);
+    const made = await agentsOf(turn.task.id);
+    assert.equal(made.get('지정'), busy.id);
+    assert.equal(made.get('아무나'), idle.id, '작가가 멈춰 덜 바쁜 일꾼');
+  });
+
+  test('모르는 역할은 400, 역할이 받지 않는 종류는 거절한다', async () => {
+    const turn = await turnOf('틀리게 맡겨 줘');
+    const unknown = await tool(turn.run_token, 'delegate_task', {
+      subtasks: [sub('일', { role: 'boss' })],
+    });
+    assert.equal(unknown.ok, false);
+    assert.match(unknown.text, /role/);
+    const wrong = await tool(turn.run_token, 'delegate_task', {
+      subtasks: [sub('코드', { role: 'writer', kind: 'make' })],
+    });
+    assert.equal(wrong.ok, false);
+    assert.match(wrong.text, /작가에게는 general · draft_post 일만 맡겨요/);
+    assert.equal((await agentsOf(turn.task.id)).size, 0);
   });
 });
