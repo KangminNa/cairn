@@ -183,6 +183,29 @@ describe('공통 앱 도메인', () => {
     assert.equal(me.member, null);
   });
 
+  test('기능 패키지의 방문자 동작은 공통 도메인에서도 닿고, 관리자 동작은 방문자로 막힌다 (2026-11-28 메일 구독)', async () => {
+    const enabled = await api.request('POST', '/api/plugins/email/enable', owner);
+    assert.ok(enabled.status < 300, enabled.text);
+    // SMTP를 정하지 않아 구독은 닫혀 있다: 문지기의 "없는 주소예요"가 아니라 패키지 동작의 답이면 닿은 것이다
+    const subscribe = await shared('/api/p/email/subscribe', null, {
+      method: 'POST',
+      body: { apps: [apps[0]?.slug], address: 'reader@example.com', agree: true },
+    });
+    assert.equal(subscribe.status, 404, subscribe.text);
+    assert.match(subscribe.text, /메일 구독을 받지 않아요/);
+    // 관리자 동작은 관리자 쿠키를 실어도 앱 도메인에서는 방문자라 막힌다
+    const remove = await shared(`/api/p/email/subscribers/${randomUUID()}/remove`, null, {
+      method: 'POST',
+      as: owner,
+      body: {},
+    });
+    assert.ok([401, 403].includes(remove.status), remove.text);
+    // 그 밖의 관리 경로는 그대로 없는 주소
+    const plugins = await shared('/api/plugins', null, { as: owner });
+    assert.equal(plugins.status, 404, plugins.text);
+    assert.match(plugins.text, /없는 주소예요/);
+  });
+
   test('3-5: 공통 도메인의 쓰기도 다른 출처 · 다른 사이트에서 오면 403', async () => {
     const [one] = apps as unknown as [{ slug: string }];
     for (const origin of ['https://evil.example', `http://other.${APPS}`]) {
