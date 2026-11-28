@@ -16,9 +16,9 @@ import type { Goal } from '../goal/goal';
 import type { OutputRow, TaskEventRow, TaskNew, TaskRow, TaskRunNew } from '../task.tables';
 import { TASK_EVENT_KIND, type TaskWaitReason } from '../task.tables';
 import { CodeScope } from './code-scope';
+import { DelegatedView } from './delegated.view';
 import { DelegationPolicy } from './delegation.policy';
 import {
-  DelegatedView,
   type JobSkillView,
   JobStateView,
   JobSubtaskResultView,

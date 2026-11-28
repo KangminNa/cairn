@@ -322,6 +322,32 @@ export interface GoalRow {
 }
 export type GoalNew = Partial<GoalRow> & Pick<GoalRow, 'id' | 'space_id' | 'title'>;
 
+/** task.learned_rules.scope (값 목록 CHECK) */
+export const LEARNED_RULE_SCOPE = ['all', 'role', 'app'] as const;
+export type LearnedRuleScope = (typeof LEARNED_RULE_SCOPE)[number];
+/** task.learned_rules.status (값 목록 CHECK) */
+export const LEARNED_RULE_STATUS = ['active', 'retired'] as const;
+export type LearnedRuleStatus = (typeof LEARNED_RULE_STATUS)[number];
+/** task.learned_rules */
+export interface LearnedRuleRow {
+  id: string;
+  space_id: string;
+  seq: number;
+  scope: LearnedRuleScope;
+  scope_key: string | null;
+  body: string;
+  helpful: number;
+  harmful: number;
+  status: LearnedRuleStatus;
+  approval_id: string | null;
+  replaced_by: string | null;
+  version: number;
+  created_at: Date;
+  updated_at: Date;
+  retired_at: Date | null;
+}
+export type LearnedRuleNew = Partial<LearnedRuleRow> & Pick<LearnedRuleRow, 'id' | 'space_id' | 'seq' | 'scope' | 'body'>;
+
 /** task.output_shares */
 export interface OutputShareRow {
   id: string;
@@ -377,6 +403,21 @@ export interface PlanUsageRow {
   seen_at: Date;
 }
 export type PlanUsageNew = Partial<PlanUsageRow> & Pick<PlanUsageRow, 'space_id' | 'tool' | 'period' | 'percent' | 'resets_at'>;
+
+/** task.rule_marks.mark (값 목록 CHECK) */
+export const RULE_MARK_MARK = ['helpful', 'harmful'] as const;
+export type RuleMarkMark = (typeof RULE_MARK_MARK)[number];
+/** task.rule_marks */
+export interface RuleMarkRow {
+  id: string;
+  space_id: string;
+  rule_id: string;
+  source: string;
+  mark: RuleMarkMark;
+  task_id: string | null;
+  created_at: Date;
+}
+export type RuleMarkNew = Partial<RuleMarkRow> & Pick<RuleMarkRow, 'id' | 'space_id' | 'rule_id' | 'source' | 'mark'>;
 
 /** task.runners */
 export interface RunnerRow {

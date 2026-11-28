@@ -1,10 +1,13 @@
 import { Injectable } from '@nestjs/common';
-import { type Actor, BaseService, Forbidden, SystemActor } from '../../platform';
+import { type Actor, BaseService, Forbidden, type Sql, SystemActor } from '../../platform';
 import { ApprovalRepository } from '../approval/approval.repository';
 import { ChatRepository } from '../chat/chat.repository';
+import type { ChatReviewVerdict } from '../chat/chat.view';
 import { ChatInspect } from '../chat/chat-inspect.policy';
 import { ChatResult } from '../chat/chat-result.policy';
 import { ChatReview } from '../chat/chat-review.policy';
+import { LearnedRuleRepository } from '../rule/rule.repository';
+import { RuleMarks } from '../rule/rule-marks.policy';
 import { Task } from '../task/task';
 import { Verdict } from './verdict';
 import { VerdictRepository } from './verdict.repository';
@@ -26,15 +29,19 @@ export class VerdictService extends BaseService {
       )?.chat;
       if (!judge || judge.status !== Task.DONE || chat?.review !== true) return 0;
       if (await verdicts.judged(spaceId, taskId)) return 0;
-      const review = ChatReview.parse(ChatResult.textOf(judge.result));
+      const text = ChatResult.textOf(judge.result);
+      const review = ChatReview.parse(text);
       const approvalId = ChatInspect.approvalOf(judge.payload);
       const rows: Verdict[] = [];
+      // 판정받은 일 (검수는 결재를 올린 작업, 검토는 그 회차): 그 아래가 따른 배운 규칙을 센다 (2026-11-28)
+      let judged: string | null = null;
       if (approvalId !== null) {
         const approvals = new ApprovalRepository(tx);
         const approval = await approvals.findIn(spaceId, approvalId);
         if (!approval?.chatId || approval.agentId === null) return 0;
         // 앞서 검수자가 고쳐 달라고 한 결재 수 + 1 (이번 결재는 빼고, 먼저 만든 것만: 처리 순서와 상관없게)
         const before = (await approvals.inspectorFixes(approval)).filter((a) => a.id < approval.id);
+        judged = approval.taskId;
         const target = Verdict.inspectTarget(approval.chatId, approval.action, approval.targetId);
         rows.push(
           Verdict.of(
@@ -53,10 +60,11 @@ export class VerdictService extends BaseService {
         if (!turn) return 0;
         const fixBy = (turn.payload as { chat?: { fixBy?: unknown } } | null)?.chat?.fixBy;
         const fixed = fixBy === ChatResult.BY_REVIEW;
+        judged = turn.id;
         const target = Verdict.reviewTarget(chat.chatId, chat.turn, fixed);
-        const judged =
+        const members =
           turn.members.length > 0 ? turn.members : turn.agent_id ? [turn.agent_id] : [];
-        for (const agentId of judged)
+        for (const agentId of members)
           rows.push(
             Verdict.of(
               spaceId,
@@ -71,7 +79,27 @@ export class VerdictService extends BaseService {
           );
       }
       for (const row of rows) await verdicts.save(row);
+      if (judged !== null)
+        await VerdictService.markRules(tx, spaceId, taskId, judged, review, text);
       return rows.length;
     });
+  }
+
+  /** 판정 하나로 배운 규칙을 센다: 검토자가 적은 표시, 통과면 따른 규칙마다 도움 (RuleMarks.ofVerdict) */
+  private static async markRules(
+    tx: Sql,
+    spaceId: string,
+    judgeTaskId: string,
+    judged: string,
+    review: ChatReviewVerdict,
+    text: string,
+  ): Promise<void> {
+    const rules = new LearnedRuleRepository(tx);
+    const marks = RuleMarks.ofVerdict(
+      await rules.followedIn(spaceId, judged),
+      review.verdict === ChatReview.PASS,
+      RuleMarks.fromReview(text),
+    );
+    await rules.mark(spaceId, RuleMarks.verdictSource(judgeTaskId), marks, judged);
   }
 }

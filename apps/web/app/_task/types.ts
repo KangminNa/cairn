@@ -46,6 +46,7 @@ import type {
   OutputShareListView,
   OutputShareView,
 } from '../../../server/src/modules/task/output-share/output-share.view';
+import type { RuleListView } from '../../../server/src/modules/task/rule/rule.view';
 import type {
   RunnerListView,
   RunnerView,
@@ -89,6 +90,8 @@ export type OutputShare = ReturnType<OutputShareView['toJSON']>;
 export type OutputShareList = ReturnType<OutputShareListView['toJSON']>;
 export type Goal = ReturnType<GoalView['toJSON']>;
 export type GoalList = ReturnType<GoalListView['toJSON']>;
+export type RuleList = ReturnType<RuleListView['toJSON']>;
+export type Rule = RuleList['rules'][number];
 export type GoalRunList = ReturnType<GoalRunListView['toJSON']>;
 export type GoalRun = GoalRunList['runs'][number];
 export type GoalRunDetail = ReturnType<GoalRunDetailView['toJSON']>;

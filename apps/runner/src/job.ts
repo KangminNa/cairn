@@ -191,7 +191,7 @@ export class Job {
       agent.flag('lead'),
       raw.optionalText('wake'),
       Boolean(payload.optionalText('delegatedBy')),
-      JobNotes.from(payload),
+      JobNotes.from(payload, raw.list('rules')),
     );
   }
 

@@ -19,6 +19,7 @@ import type {
   GoalList,
   GoalRunDetail,
   GoalRunList,
+  RuleList,
   Runner,
   RunnerList,
   ScheduleList,
@@ -131,6 +132,14 @@ export function useEngines(): readonly Engine[] {
 /** 목표 나무. 목표마다 이어진 작업 수가 있어 작업이 바뀔 때도 다시 읽는다 */
 export function useGoals() {
   return useLiveValue('goals', () => api<GoalList>('GET', '/api/goals'), TASK_TOPICS);
+}
+
+/** 배운 규칙 (2026-11-28): 만들기 · 내리기는 승인 · 콘솔에서 바뀌고, 도움 · 해로움은 판정 · 수정 요청마다 쌓인다 */
+export function useRules() {
+  return useLiveValue('rules', () => api<RuleList>('GET', '/api/rules'), [
+    'task.rule.changed',
+    'task.approval.*',
+  ]);
 }
 
 /** 목표 실행 목록 (최근부터) */
