@@ -382,7 +382,7 @@ describe('지시문', () => {
     const plan = { steps: ['조사 → 리서처'], criteria: ['표에 5개'], mustNot: ['메일 보내기'] };
     const task = { id: 't', title: '비교', payload: { plan } };
     const prompt = job({ task }).prompt(REPO_PROMPTS, false);
-    assert.ok(prompt.includes('# 내 계획 (set_plan으로 정함, 바꿀 수 없음)'));
+    assert.ok(prompt.includes('# 내 계획 (set_plan으로 정함, 완료 조건은 바꿀 수 없음)'));
     assert.ok(prompt.includes('## 완료 조건\n- 표에 5개'));
     assert.ok(prompt.includes('## 하지 말 것\n- 메일 보내기'));
     assert.equal(job({}).prompt(REPO_PROMPTS, false).includes('내 계획'), false);

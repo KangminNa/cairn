@@ -1,6 +1,7 @@
 import type { AiStream } from './ai-tool';
 import { type ConnectorCall, ConnectorCalls } from './connector-calls';
 import { Json } from './json';
+import { LoopWatch } from './loop-watch';
 import { type PlanWindow, RunEvent } from './progress';
 import { RunTranscript } from './run-transcript';
 
@@ -21,6 +22,8 @@ export class CodexStream implements AiStream {
   static readonly SERVER = 'moida';
   /** 커넥터(x-<이름>)를 부른 수 · 실패 */
   private readonly calls = new ConnectorCalls();
+  /** 같은 동작을 되풀이하는지 (끝난 항목의 부름 · 결과로 본다) */
+  private readonly loops = new LoopWatch();
   private static readonly READ_TOOLS: ReadonlySet<string> = new Set([
     'search_sessions',
     'get_session',
@@ -71,6 +74,10 @@ export class CodexStream implements AiStream {
 
   get breach(): string | null {
     return this.breachText;
+  }
+
+  get stuck(): string | null {
+    return this.loops.stuck;
   }
 
   /** codex exec --json은 모델을 알리지 않는다 (0.164.0) */
@@ -141,8 +148,20 @@ export class CodexStream implements AiStream {
         this.transcript.said(item.text('text'));
         return [];
       case 'mcp_tool_call':
+        this.loops.done(
+          item.text('tool'),
+          item.field('arguments'),
+          item.field('result'),
+          CodexStream.failed(item),
+        );
         return this.toolFailed(item);
       case 'command_execution':
+        this.loops.done(
+          '셸',
+          item.text('command'),
+          [item.field('aggregated_output'), item.field('exit_code')],
+          (item.optionalNumber('exit_code') ?? 0) !== 0,
+        );
         return this.shellAllowed ? CodexStream.shellFailed(item) : this.shellOpened(item);
       case 'file_change': {
         const paths = item
@@ -170,9 +189,12 @@ export class CodexStream implements AiStream {
     return [new RunEvent(kind, CodexStream.describe(tool, item.child('arguments')), 0)];
   }
 
+  private static failed(item: Json): boolean {
+    return item.text('status') === 'failed' || item.child('error').text('message') !== '';
+  }
+
   private toolFailed(item: Json): readonly RunEvent[] {
-    const failed = item.text('status') === 'failed' || item.child('error').text('message') !== '';
-    if (!failed) return [];
+    if (!CodexStream.failed(item)) return [];
     const why = item.child('error').text('message') || '도구가 실패했어요';
     this.calls.failed(item.text('server'), why);
     return [new RunEvent(RunEvent.ERROR, `${item.text('tool')}: ${why}`, 0)];

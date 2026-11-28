@@ -13,6 +13,7 @@ import { PublishAppTool } from './chat/chat-publish.tool';
 import {
   AgentUpdatesTool,
   AskBriefTool,
+  NoteProgressTool,
   PostUpdateTool,
   SetDeliverTool,
 } from './chat/chat-update.tool';
@@ -69,6 +70,7 @@ export class TaskTools {
     PostUpdateTool,
     SetDeliverTool,
     AskBriefTool,
+    NoteProgressTool,
     PublishAppTool,
     ProposeToolTool,
     FindToolTool,
@@ -110,6 +112,7 @@ export class TaskTools {
     postUpdate: PostUpdateTool,
     setDeliver: SetDeliverTool,
     askBrief: AskBriefTool,
+    noteProgress: NoteProgressTool,
     publishApp: PublishAppTool,
     proposeTool: ProposeToolTool,
     findTool: FindToolTool,
@@ -147,6 +150,7 @@ export class TaskTools {
       postUpdate,
       setDeliver,
       askBrief,
+      noteProgress,
       publishApp,
       proposeTool,
       findTool,

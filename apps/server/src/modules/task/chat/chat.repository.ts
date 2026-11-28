@@ -75,6 +75,18 @@ export class ChatRepository extends TableRepository<ChatRow, Chat> {
     return row?.count ?? 0;
   }
 
+  /**
+   * 이 작업이 post_update · note_progress로 남긴 소식의 수. 진행 장부(data.ledger, 2026-11-28)와 그 밖의 소식은
+   * 한도를 따로 센다 (장부가 중간 보고의 자리를 먹지 않게)
+   */
+  async countPosted(taskId: string, ledger: boolean): Promise<number> {
+    const [row] = await this.sql<{ count: number }[]>`
+      SELECT count(*)::int AS count FROM task.chat_updates
+      WHERE task_id = ${taskId} AND kind = ANY(${ChatUpdates.POSTED as string[]}::text[])
+        AND coalesce(data ? 'ledger', false) = ${ledger}`;
+    return row?.count ?? 0;
+  }
+
   /** 이 작업이 그 종류의 소식을 이미 남겼는가 (끝남 소식이 두 번 쌓이지 않게) */
   async hasUpdate(taskId: string, kind: string): Promise<boolean> {
     return (await this.countUpdates(taskId, [kind])) > 0;

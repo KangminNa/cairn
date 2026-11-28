@@ -1,6 +1,7 @@
 import type { AiStream } from './ai-tool';
 import { type ConnectorCall, ConnectorCalls } from './connector-calls';
 import { Json } from './json';
+import { LoopWatch } from './loop-watch';
 import { PlanWindow, RunEvent } from './progress';
 import { RunTranscript } from './run-transcript';
 
@@ -43,6 +44,8 @@ export class ClaudeStream implements AiStream {
   private readonly countedByMessage = new Map<string, number>();
   /** 커넥터(x-<이름>)를 부른 수 · 실패 */
   private readonly calls = new ConnectorCalls();
+  /** 같은 동작을 되풀이하는지 (부름 → 결과를 짝지어 본다) */
+  private readonly loops = new LoopWatch();
   private counted = 0;
   /** 아직 어느 기록에도 싣지 않은 토큰 */
   private owed = 0;
@@ -113,6 +116,10 @@ export class ClaudeStream implements AiStream {
     if (this.strayServers.length > 0)
       return `허락하지 않은 MCP 서버: ${this.strayServers.join(', ')}`;
     return this.shellUsed === null ? null : `셸이 열려 있어요: ${this.shellUsed}`;
+  }
+
+  get stuck(): string | null {
+    return this.loops.stuck;
   }
 
   /** 가장 최근에 본 구독 사용률을 꺼낸다. 새로 본 것이 없으면 비어 있다 */
@@ -195,6 +202,7 @@ export class ClaudeStream implements AiStream {
         if (memo && !this.memoLast) this.memoAnswer = this.lastFinish;
         this.memoLast = memo;
         this.calls.called(ConnectorCalls.serverOf(name) ?? '', block.text('id'));
+        this.loops.called(block.text('id'), ClaudeStream.shortName(name), block.field('input'));
         if (name === ClaudeStream.SHELL && !this.shellAllowed)
           this.shellUsed ??= block.child('input').text('command') || '(명령)';
         const kind = ClaudeStream.kindOf(name);
@@ -207,10 +215,17 @@ export class ClaudeStream implements AiStream {
   }
 
   private user(event: Json): readonly RunEvent[] {
-    const failed = event
+    const results = event
       .child('message')
       .list('content')
-      .filter((block) => block.text('type') === 'tool_result' && block.flag('is_error'));
+      .filter((block) => block.text('type') === 'tool_result');
+    for (const block of results)
+      this.loops.answered(
+        block.text('tool_use_id'),
+        block.field('content'),
+        block.flag('is_error'),
+      );
+    const failed = results.filter((block) => block.flag('is_error'));
     for (const block of failed)
       this.calls.failed(block.text('tool_use_id'), ClaudeStream.resultBody(block));
     return failed.map((block) => new RunEvent(RunEvent.ERROR, ClaudeStream.resultBody(block), 0));

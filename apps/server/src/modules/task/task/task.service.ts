@@ -245,7 +245,7 @@ export class TaskService extends BaseService {
   }
 
   /**
-   * 맡은 일의 계획 (MCP set_plan, 2026-11-20 큰 일은 계획 먼저): 끝나기 전에 한 번만 (TaskPlan). 대화의 일이면 그 대화에
+   * 맡은 일의 계획 (MCP set_plan, 2026-11-20 큰 일은 계획 먼저): 끝나기 전에 한 번만, 진전 없음이 이어지면 단계만 다시 (TaskPlan). 대화의 일이면 그 대화에
    * 소식(정한 것)으로도 남겨 관리자가 바로 본다. 대화 줄은 잠그지 않는다 (소식은 추가만, ChatUpdateService와 같다)
    */
   async setPlan(actor: Actor, req: SetPlanInput): Promise<PlanSetView> {
@@ -258,17 +258,21 @@ export class TaskService extends BaseService {
       const task = await tasks.lock(spaceId, taskId);
       if (task.agentId !== agentId) throw new Forbidden(Actor.AGENT, '맡은 일의 계획만 정해요');
       if (!task.open) throw new Conflict('끝난 일이에요');
-      task.declare((payload) => TaskPlan.declare(payload, req.plan));
+      const box = { set: { plan: req.plan, again: false } };
+      task.declare((payload) => {
+        box.set = TaskPlan.declared(payload, req.plan);
+        return TaskPlan.declare(payload, req.plan);
+      });
       await tasks.save(task);
+      const { plan, again } = box.set;
       const chats = new ChatRepository(tx);
       const place = await chats.placeOf(taskId);
       if (place) {
         const chat = await chats.load(spaceId, place.chat_id);
-        chat.note('decision', TaskPlan.note(req.plan), taskId, agentId, now);
+        chat.note('decision', TaskPlan.note(plan, again), taskId, agentId, now);
         await chats.save(chat);
       }
-      const { steps, criteria, mustNot } = req.plan;
-      return new PlanSetView(steps, criteria, mustNot);
+      return new PlanSetView(plan.steps, plan.criteria, plan.mustNot);
     });
   }
 

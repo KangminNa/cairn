@@ -114,3 +114,18 @@ export class BriefAskedView {
     return { asked: this.questions, next: 'finish_turn' as const };
   }
 }
+
+/**
+ * note_progress의 답 (2026-11-28 진행 장부): 진전 없음이 이어진 수와 계획을 다시 세울 때인지.
+ * replan이면 set_plan으로 단계 · 하지 말 것을 다시 정하고(완료 조건은 그대로) 다른 길로 맡긴다
+ */
+export class ProgressNotedView {
+  constructor(
+    private readonly stalled: number,
+    private readonly replan: boolean,
+  ) {}
+
+  toJSON() {
+    return { stalled: this.stalled, replan: this.replan };
+  }
+}

@@ -198,7 +198,7 @@ export class JobRun {
       this.reporter.notePlan(stream.takePlanUsage());
       this.reporter.noteModel(stream.model);
       this.reporter.noteSession(stream.sessionId, job.lineage?.resumed ?? false);
-      if (stream.breach !== null) wake.abort();
+      if (stream.breach !== null || stream.stuck !== null) wake.abort();
     });
     void child.exited.then(() => wake.abort());
     const decided = await this.watch(stream, wake.signal);
@@ -294,7 +294,7 @@ export class JobRun {
     const alarm = AbortSignal.any([wake, this.stop]);
     for (;;) {
       await pause(JobRun.REPORT_MS, alarm);
-      if (stream.breach !== null) return this.breached(stream);
+      if (stream.breach !== null || stream.stuck !== null) return this.breached(stream);
       if (this.stop.aborted) return RunEnding.release(JobRun.STOPPING);
       if (wake.aborted) return null;
       const ending = await this.reportOnce();
@@ -302,9 +302,9 @@ export class JobRun {
     }
   }
 
-  /** 다른 MCP 서버나 열린 셸이 보이면 격리가 깨진 것이다. 쓰기 전에 끈다 */
+  /** 다른 MCP 서버나 열린 셸이 보이면 격리가 깨진 것이다. 쓰기 전에 끈다. 같은 동작을 되풀이해 맴돌아도 끈다 (LoopWatch) */
   private breached(stream: AiStream): RunEnding {
-    const error = `격리가 깨져 멈췄어요. ${stream.breach}`;
+    const error = stream.breach ? `격리가 깨져 멈췄어요. ${stream.breach}` : String(stream.stuck);
     return RunEnding.submit(error, RunResult.failed(error, this.redactor));
   }
 

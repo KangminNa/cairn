@@ -19,6 +19,8 @@ export interface AiStream {
   readonly failure: string | null;
   /** 격리가 깨졌으면 그 이유 (허락하지 않은 MCP 서버, 열린 셸). 보이면 바로 끈다 */
   readonly breach: string | null;
+  /** 같은 동작을 되풀이해 맴돌면 그 까닭 (LoopWatch, 2026-11-28). 보이면 끄고 일을 실패로 끝낸다 */
+  readonly stuck: string | null;
   /** 가장 최근에 본 구독 사용률. 새로 본 것이 없으면 비어 있다 */
   takePlanUsage(): readonly PlanWindow[];
   /** CLI가 알린 모델. 모르면 null */

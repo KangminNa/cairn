@@ -1,4 +1,5 @@
 import { RuleViolation } from '../../platform';
+import { ProgressLedger } from './progress-ledger.policy';
 
 /** 계획 하나 (작업의 payload.plan에 함께 적는 칸) */
 export interface TaskPlanRow {
@@ -19,15 +20,46 @@ export class TaskPlan {
   static readonly LINE_MAX = 200;
   private static readonly NOTE_MAX = 2000;
 
-  /** 계획을 적은 payload. 이미 정했으면 RuleViolation (완료 조건은 바꿀 수 없다) */
+  /**
+   * 계획을 적은 payload. 이미 정했으면 RuleViolation (완료 조건은 바꿀 수 없다).
+   * 진행 장부의 진전 없음이 이어졌으면(ProgressLedger.replanDue, 2026-11-28) 단계 · 하지 말 것만 다시 정한다:
+   * 완료 조건은 비우거나 처음 것 그대로 적어야 하고 처음 것을 둔다
+   */
   static declare(
     payload: Readonly<Record<string, unknown>>,
     plan: TaskPlanRow,
   ): Record<string, unknown> {
-    if (TaskPlan.of(payload) !== null)
-      throw new RuleViolation('계획은 한 번만 정해요 (완료 조건은 바꿀 수 없어요)');
+    const before = TaskPlan.of(payload);
+    if (before !== null) return TaskPlan.redeclare(payload, before, plan);
     if (plan.criteria.length === 0) throw new RuleViolation('완료 조건을 하나 이상 적어 주세요');
     return { ...payload, plan: { ...plan } };
+  }
+
+  /** declare로 저장될 계획(다시 세웠으면 처음 완료 조건)과 다시 세웠는지 (set_plan의 답 · 소식) */
+  static declared(
+    payload: Readonly<Record<string, unknown>>,
+    plan: TaskPlanRow,
+  ): { plan: TaskPlanRow; again: boolean } {
+    const next = TaskPlan.declare(payload, plan);
+    return { plan: TaskPlan.of(next) ?? plan, again: TaskPlan.of(payload) !== null };
+  }
+
+  private static redeclare(
+    payload: Readonly<Record<string, unknown>>,
+    before: TaskPlanRow,
+    plan: TaskPlanRow,
+  ): Record<string, unknown> {
+    if (!ProgressLedger.replanDue(payload))
+      throw new RuleViolation(
+        `계획은 한 번만 정해요 (완료 조건은 바꿀 수 없어요). 진전 없음이 ${ProgressLedger.STALL_LIMIT}번 이어지면 단계를 다시 정해요`,
+      );
+    const same = plan.criteria.join('\n') === before.criteria.join('\n');
+    if (plan.criteria.length > 0 && !same)
+      throw new RuleViolation(
+        '다시 세울 때도 완료 조건은 그대로예요 (criteria를 비우거나 처음 것 그대로)',
+      );
+    const next = { steps: plan.steps, criteria: before.criteria, mustNot: plan.mustNot };
+    return ProgressLedger.replanned({ ...payload, plan: next });
   }
 
   /** 작업에 정해 둔 계획. 없거나 모양이 틀리면 null */
@@ -66,11 +98,11 @@ export class TaskPlan {
   }
 
   /** 대화의 소식 한 줄 (관리자가 계획을 바로 본다). 소식의 길이(2,000자)를 넘으면 자른다 */
-  static note(plan: TaskPlanRow): string {
+  static note(plan: TaskPlanRow, again = false): string {
     const block = (head: string, lines: readonly string[]) =>
       lines.length > 0 ? [head, ...lines.map((l) => `- ${l}`)].join('\n') : '';
     return [
-      '계획을 정했어요',
+      again ? '계획을 다시 세웠어요 (완료 조건은 그대로)' : '계획을 정했어요',
       block('단계', plan.steps),
       block('완료 조건', plan.criteria),
       block('하지 말 것', plan.mustNot),

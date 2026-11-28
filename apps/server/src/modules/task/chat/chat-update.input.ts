@@ -1,4 +1,5 @@
 import { BaseRequest, RuleViolation } from '../../platform';
+import { type LedgerEntry, ProgressLedger } from '../task/progress-ledger.policy';
 import { ChatUpdates } from './chat-update.policy';
 import { DecisionNote, type DecisionNoteRow } from './decision-note.policy';
 import { TurnBrief, type TurnBriefRow } from './turn-brief.policy';
@@ -134,5 +135,29 @@ export class AskBriefInput extends BaseRequest {
         questions,
       });
     });
+  }
+}
+
+/**
+ * MCP note_progress { done, progressing, looping, next, why } (2026-11-28 진행 장부, 작업 토큰):
+ * 대표가 하위 작업 결과를 받고 깬 실행에서 다음 동작 전에 남기는 한 줄 판단 (ProgressLedger)
+ */
+export class NoteProgressInput extends BaseRequest {
+  private constructor(readonly entry: LedgerEntry) {
+    super();
+  }
+
+  static from(raw: unknown): NoteProgressInput {
+    return BaseRequest.read(
+      raw,
+      (f) =>
+        new NoteProgressInput({
+          done: f.boolean('done'),
+          progressing: f.boolean('progressing'),
+          looping: f.boolean('looping'),
+          next: f.text('next', ProgressLedger.NEXT_MAX).trim(),
+          why: f.optionalText('why', ProgressLedger.WHY_MAX)?.trim() ?? '',
+        }),
+    );
   }
 }

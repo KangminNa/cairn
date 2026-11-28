@@ -1,9 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { Actor, BaseTool } from '../../platform';
+import { ProgressLedger } from '../task/progress-ledger.policy';
 import { CHAT_DELIVER } from '../task.tables';
 import {
   AgentUpdatesInput,
   AskBriefInput,
+  NoteProgressInput,
   PostUpdateInput,
   SetDeliverInput,
 } from './chat-update.input';
@@ -15,6 +17,7 @@ import {
   type BriefAskedView,
   type DeliverSetView,
   PostedUpdateView,
+  type ProgressNotedView,
 } from './chat-update.view';
 import { DecisionNote } from './decision-note.policy';
 import { TurnBrief } from './turn-brief.policy';
@@ -153,5 +156,31 @@ export class AskBriefTool extends BaseTool {
 
   handle(actor: Actor, raw: unknown): Promise<BriefAskedView> {
     return this.updates.askBrief(actor, AskBriefInput.from(raw));
+  }
+}
+
+/** 진행 장부 (2026-11-28): 대표가 하위 작업 결과를 받고 깬 실행에서 다음 동작 전에 한 줄 판단을 남긴다 */
+@Injectable()
+export class NoteProgressTool extends BaseTool {
+  readonly name = 'note_progress';
+  readonly scope = Actor.AGENT;
+  readonly readOnly = false;
+  readonly inputSchema = {
+    properties: {
+      done: { type: 'boolean' },
+      progressing: { type: 'boolean' },
+      looping: { type: 'boolean' },
+      next: { type: 'string', maxLength: ProgressLedger.NEXT_MAX },
+      why: { type: 'string', maxLength: ProgressLedger.WHY_MAX },
+    },
+    required: ['done', 'progressing', 'looping', 'next'],
+  };
+
+  constructor(private readonly updates: ChatUpdateService) {
+    super();
+  }
+
+  handle(actor: Actor, raw: unknown): Promise<ProgressNotedView> {
+    return this.updates.noteProgress(actor, NoteProgressInput.from(raw));
   }
 }

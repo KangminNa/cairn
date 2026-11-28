@@ -13,12 +13,23 @@ import { AgentRepository } from '../agent/agent.repository';
 import { Approval } from '../approval/approval';
 import { ApprovalRepository } from '../approval/approval.repository';
 import { DecisionAsk } from '../approval/decision-ask.policy';
+import { ProgressLedger } from '../task/progress-ledger.policy';
 import { TaskRepository } from '../task/task.repository';
 import { ChatRepository } from './chat.repository';
 import { ChatPlan } from './chat-plan.policy';
-import type { AskBriefInput, PostUpdateInput, SetDeliverInput } from './chat-update.input';
+import type {
+  AskBriefInput,
+  NoteProgressInput,
+  PostUpdateInput,
+  SetDeliverInput,
+} from './chat-update.input';
 import { ChatUpdates } from './chat-update.policy';
-import { BriefAskedView, DeliverSetView, PostedUpdateView } from './chat-update.view';
+import {
+  BriefAskedView,
+  DeliverSetView,
+  PostedUpdateView,
+  ProgressNotedView,
+} from './chat-update.view';
 import { DecisionNote, type DecisionNoteRow } from './decision-note.policy';
 import { TurnBrief } from './turn-brief.policy';
 import { TurnDeliver } from './turn-deliver.policy';
@@ -79,7 +90,7 @@ export class ChatUpdateService extends BaseService {
       const place = await chats.placeOf(taskId);
       if (!place) throw new RuleViolation('대화에서 맡은 일이 아니에요');
       const chat = await chats.load(spaceId, place.chat_id);
-      const posted = await chats.countUpdates(taskId, ChatUpdates.POSTED);
+      const posted = await chats.countPosted(taskId, false);
       const data = DecisionNote.dataFor(req.kind, req.decision);
       const stop =
         req.decision && DecisionNote.stops(chat.stopMode, req.decision)
@@ -89,6 +100,43 @@ export class ChatUpdateService extends BaseService {
       chat.post(req.kind, said, taskId, agentId, posted, now);
       await chats.save(chat);
       return new PostedUpdateView(await chats.numberOf(chat.addedUpdates[0]?.id ?? ''), stop);
+    });
+  }
+
+  /**
+   * 진행 장부 (2026-11-28, Magentic-One의 progress ledger, MCP note_progress, 작업 토큰): 대표가 맡은 일에서 하위 작업 결과를
+   * 받고 깬 실행마다 끝났나 · 나아지나 · 맴도나 · 다음을 한 줄로. 진전 없음이 이어진 수는 작업의 payload.ledger에
+   * (ProgressLedger), 대화의 일이면 소식(progress, data.ledger)으로도 남겨 화면의 상태 한 줄에 보인다. 잠그는 순서는 작업 → (대화는 쓰기만)
+   */
+  async noteProgress(actor: Actor, req: NoteProgressInput): Promise<ProgressNotedView> {
+    actor.assertCan(Actor.AGENT);
+    if (!(actor instanceof AgentActor) || !actor.spaceId || !actor.id)
+      throw new Forbidden(Actor.AGENT);
+    const { spaceId, id: agentId, taskId } = actor;
+    const now = new Date();
+    return this.transaction(async (tx) => {
+      const tasks = new TaskRepository(tx);
+      const task = await tasks.lockById(taskId);
+      const lead = await new AgentRepository(tx).findLead(spaceId);
+      if (task?.spaceId !== spaceId || task.agentId !== agentId || lead?.id !== agentId)
+        throw new Forbidden(Actor.AGENT, '맡은 일을 하는 대표만 남겨요');
+      if (!task.open) throw new Conflict('끝난 일이에요');
+      let stalled = 0;
+      task.declare((p) => {
+        const next = ProgressLedger.record(p, req.entry);
+        stalled = ProgressLedger.stalled(next);
+        return next;
+      });
+      await tasks.save(task);
+      const chats = new ChatRepository(tx);
+      const place = await chats.placeOf(taskId);
+      if (place) {
+        const chat = await chats.load(spaceId, place.chat_id);
+        const noted = await chats.countPosted(taskId, true);
+        chat.post('progress', ProgressLedger.said(req.entry, stalled), taskId, agentId, noted, now);
+        await chats.save(chat);
+      }
+      return new ProgressNotedView(stalled, stalled >= ProgressLedger.STALL_LIMIT);
     });
   }
 

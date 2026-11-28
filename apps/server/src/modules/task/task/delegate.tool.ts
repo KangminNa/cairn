@@ -137,7 +137,8 @@ export class AskHelpTool extends BaseTool {
   }
 }
 
-// MCP 도구 set_plan (2026-11-20 큰 일은 계획 먼저): 맡은 일의 단계 · 완료 조건 · 하지 말 것을 한 번 정한다. 바꿀 수 없다
+// MCP 도구 set_plan (2026-11-20 큰 일은 계획 먼저): 맡은 일의 단계 · 완료 조건 · 하지 말 것을 한 번 정한다. 완료 조건은 바꿀 수 없다
+// (진전 없음이 이어지면 단계 · 하지 말 것만 다시, 2026-11-28 진행 장부). 처음 정할 때 완료 조건이 없으면 TaskPlan이 거절한다
 @Injectable()
 export class SetPlanTool extends BaseTool {
   readonly name = 'set_plan';
@@ -146,10 +147,9 @@ export class SetPlanTool extends BaseTool {
   readonly inputSchema = {
     properties: {
       steps: SetPlanTool.list(TaskPlan.STEPS_MAX),
-      criteria: { ...SetPlanTool.list(TaskPlan.CRITERIA_MAX), minItems: 1 },
+      criteria: SetPlanTool.list(TaskPlan.CRITERIA_MAX),
       must_not: SetPlanTool.list(TaskPlan.MUST_NOT_MAX),
     },
-    required: ['criteria'],
   };
 
   private static list(max: number) {
